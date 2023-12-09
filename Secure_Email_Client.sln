@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.6.33723.286
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Secure_Email_Client", "Secure_Email_Client\Secure_Email_Client.csproj", "{EB26A739-0FB6-4288-B16E-5EE38C7BD59E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EB26A739-0FB6-4288-B16E-5EE38C7BD59E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB26A739-0FB6-4288-B16E-5EE38C7BD59E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB26A739-0FB6-4288-B16E-5EE38C7BD59E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB26A739-0FB6-4288-B16E-5EE38C7BD59E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {ED397317-4947-48B6-A596-C983D45F3B1E}
+	EndGlobalSection
+EndGlobal
