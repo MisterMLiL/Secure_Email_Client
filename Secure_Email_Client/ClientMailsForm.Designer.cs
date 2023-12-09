@@ -37,7 +37,7 @@
             mailData = new DataGridView();
             senderMail = new DataGridViewTextBoxColumn();
             subjectMail = new DataGridViewTextBoxColumn();
-            contentMail = new DataGridViewTextBoxColumn();
+            dataMail = new DataGridViewTextBoxColumn();
             foldersPanel = new Panel();
             mailFoldersPanel = new Panel();
             foldersList = new ListBox();
@@ -111,7 +111,7 @@
             dataGridViewCellStyle1.WrapMode = DataGridViewTriState.True;
             mailData.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
             mailData.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            mailData.Columns.AddRange(new DataGridViewColumn[] { senderMail, subjectMail, contentMail });
+            mailData.Columns.AddRange(new DataGridViewColumn[] { senderMail, subjectMail, dataMail });
             mailData.Dock = DockStyle.Fill;
             mailData.GridColor = Color.White;
             mailData.Location = new Point(0, 0);
@@ -147,12 +147,12 @@
             subjectMail.Name = "subjectMail";
             subjectMail.ReadOnly = true;
             // 
-            // contentMail
+            // dataMail
             // 
-            contentMail.FillWeight = 35F;
-            contentMail.HeaderText = "Содержимое";
-            contentMail.Name = "contentMail";
-            contentMail.ReadOnly = true;
+            dataMail.FillWeight = 35F;
+            dataMail.HeaderText = "Дата";
+            dataMail.Name = "dataMail";
+            dataMail.ReadOnly = true;
             // 
             // foldersPanel
             // 
@@ -251,7 +251,7 @@
             contactButton.Name = "contactButton";
             contactButton.Size = new Size(40, 40);
             contactButton.TabIndex = 1;
-            contactButton.Text = "📞";
+            contactButton.Text = "👤";
             contactButton.UseVisualStyleBackColor = false;
             contactButton.Click += contactButton_Click;
             // 
@@ -371,6 +371,6 @@
         private Button contactButton;
         private DataGridViewTextBoxColumn senderMail;
         private DataGridViewTextBoxColumn subjectMail;
-        private DataGridViewTextBoxColumn contentMail;
+        private DataGridViewTextBoxColumn dataMail;
     }
 }

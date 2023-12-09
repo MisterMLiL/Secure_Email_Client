@@ -328,5 +328,97 @@ namespace Secure_Email_Client
                 return fsDecrypted.ToArray();
             }
         }
+
+        public static void RemoveTempFiles()
+        {
+            if (Directory.Exists(tempEmails))
+            {
+                Directory.Delete(tempEmails);
+            }
+        }
+
+        static string publicKeyPath = "publicKey.xml";
+
+        //static void Main()
+        //{
+        //    while (true)
+        //    {
+        //        Console.WriteLine("Выберите операцию:");
+        //        Console.WriteLine("1. Создать цифровую подпись");
+        //        Console.WriteLine("2. Проверить цифровую подпись");
+        //        Console.WriteLine("0. Выход");
+        //        Console.Write("Ваш выбор: ");
+
+        //        int choice;
+        //        if (!int.TryParse(Console.ReadLine(), out choice))
+        //        {
+        //            Console.WriteLine("Неверный ввод. Попробуйте снова.\n");
+        //            continue;
+        //        }
+
+        //        switch (choice)
+        //        {
+        //            case 1:
+        //                Console.Write("Введите путь к файлу для создания подписи: ");
+        //                string sourceFile = Console.ReadLine();
+        //                Console.Write("Введите путь для сохранения файла с подписью: ");
+        //                string signatureFile = Console.ReadLine();
+
+        //                using (var dsa = new DSACryptoServiceProvider())
+        //                {
+        //                    string privateKey = dsa.ToXmlString(true);
+        //                    string publicKey = dsa.ToXmlString(false); // Сохраняем публичный ключ
+        //                    File.WriteAllText(publicKeyPath, publicKey); // Записываем публичный ключ в файл
+        //                    CreateSignature(sourceFile, signatureFile, privateKey);
+        //                    Console.WriteLine("Цифровая подпись успешно создана!\n");
+        //                }
+        //                break;
+
+        //            case 2:
+        //                Console.Write("Введите путь к исходному файлу: ");
+        //                sourceFile = Console.ReadLine();
+        //                Console.Write("Введите путь к файлу с подписью: ");
+        //                signatureFile = Console.ReadLine();
+
+        //                string loadedPublicKey = File.ReadAllText(publicKeyPath);
+        //                bool isVerified = VerifySignature(sourceFile, signatureFile, loadedPublicKey);
+        //                Console.WriteLine($"Подпись верифицирована: {isVerified}\n");
+        //                break;
+
+        //            case 0:
+        //                return; // Завершение программы
+
+        //            default:
+        //                Console.WriteLine("Неверный выбор. Попробуйте снова.\n");
+        //                break;
+        //        }
+        //    }
+        //}
+
+        public static string CreateSignature(byte[] data, string signatureFile, string privateKey)
+        {
+            byte[] signature;
+
+            using (var dsa = new DSACryptoServiceProvider())
+            {
+                dsa.FromXmlString(privateKey);
+                signature = dsa.SignData(data, HashAlgorithmName.SHA1);
+            }
+
+            string path = Path.Combine(tempEmails, signatureFile);
+
+            File.WriteAllBytes(path, signature);
+
+            return path;
+        }
+
+        public static bool VerifySignature(byte[] data, byte[] signature, string publicKey)
+        {
+            using (var dsa = new DSACryptoServiceProvider())
+            {
+                dsa.FromXmlString(publicKey);
+                return dsa.VerifyData(data, signature, HashAlgorithmName.SHA1);
+            }
+        }
     }
 }

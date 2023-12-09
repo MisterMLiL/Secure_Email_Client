@@ -324,14 +324,22 @@ namespace Secure_Email_Client
                     sentFolder.Close();
 
                     MessageBox.Show("Сообщение отправлено!");
+
+                    EncryptedMessage.RemoveTempFiles();
+
                     this.Close();
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show("Сообщение не отправлено.\n" + ex.Message);
+
+                    EncryptedMessage.RemoveTempFiles();
+
                     return false;
                 }
             }
+
+            EncryptedMessage.RemoveTempFiles();
 
             return false;
         }
@@ -439,18 +447,37 @@ namespace Secure_Email_Client
                     sentFolder.Close();
 
                     MessageBox.Show("Сообщение отправлено!");
+
+                    EncryptedMessage.RemoveTempFiles();
+
                     this.Close();
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show("Сообщение не отправлено.\n" + ex.Message);
+
+                    EncryptedMessage.RemoveTempFiles();
+
                     return false;
                 }
             }
 
+            EncryptedMessage.RemoveTempFiles();
+
             return false;
         }
 
+        private string CreateSignature(byte[] data, string pathSignature, string key)
+        {
+            string path = EncryptedMessage.CreateSignature(data, pathSignature, key);
+            return path;
+        }
+
+        private bool CheckSignature(byte[] data, byte[] signature, string key)
+        {
+            bool isVerif = EncryptedMessage.VerifySignature(data, signature, key);
+            return isVerif;
+        }
 
         private void sentButton_Click(object sender, EventArgs e)
         {

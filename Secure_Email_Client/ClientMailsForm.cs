@@ -463,18 +463,9 @@ namespace Secure_Email_Client
                         subject.Replace("%%%", "");
                     }
 
-                    string body = "";
+                    string date = message.Date.ToString();
 
-                    if (string.IsNullOrEmpty(message.TextBody))
-                    {
-                        body = message.HtmlBody;
-                    }
-                    else if (string.IsNullOrEmpty(message.HtmlBody))
-                    {
-                        body = message.TextBody;
-                    }
-
-                    mailData.Rows.Add(from, subject, body);
+                    mailData.Rows.Add(from, subject, date);
                     mailData.Rows[i].HeaderCell.Value = i.ToString();
                 }
 
@@ -651,9 +642,9 @@ namespace Secure_Email_Client
                                 throw new Exception("Ошибка чтения данных письма");
                             }
 
-                            string messagePath = Path.Combine(emailsFolderPath, currentUser.Login, "body_temp");
-                            string keyPath = Path.Combine(emailsFolderPath, currentUser.Login, "des_key_temp");
-                            string ivPath = Path.Combine(emailsFolderPath, currentUser.Login, "des_iv_temp");
+                            string messagePath = Path.Combine("temp_emails", currentUser.Login, "body_temp");
+                            string keyPath = Path.Combine("temp_emails", currentUser.Login, "des_key_temp");
+                            string ivPath = Path.Combine("temp_emails", currentUser.Login, "des_iv_temp");
 
                             byte[] desKey;
                             using (var stream = File.Create(keyPath))
@@ -735,6 +726,8 @@ namespace Secure_Email_Client
                         {
                             MessageBox.Show("Ошибка расшифрования сообщения:\n" + exc.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
+
+                        EncryptedMessage.RemoveTempFiles();
                     }
 
                     using (var sentForm = new OneMailForm(message, isEnc, desDecrypted, userFrom, currentUser.Login))
