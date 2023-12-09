@@ -23,6 +23,7 @@ using System.Security.Cryptography;
 using System.Diagnostics.Metrics;
 using Microsoft.VisualBasic.ApplicationServices;
 using System.Diagnostics;
+using Org.BouncyCastle.Crypto;
 
 namespace Secure_Email_Client
 {
@@ -264,6 +265,8 @@ namespace Secure_Email_Client
         // Отправить готовое письмо
         private bool CreateMessage()
         {
+            List<Stream> streams = new List<Stream>();
+
             // кому отправляем
             string to = toTextBox.Text;
 
@@ -290,11 +293,59 @@ namespace Secure_Email_Client
                 text
             };
 
+            if (checkESP.Checked)
+            {
+                byte[] textBytes = Encoding.UTF8.GetBytes(text.Text);
+                byte[] attachmentsBytes = fileAttachments.SelectMany(item => File.ReadAllBytes(item.FilePathName)).ToArray();
+
+                byte[] combinedBytes = textBytes.Concat(attachmentsBytes).ToArray();
+
+                string privateKey;
+                string publicKey;
+
+                using (var dsa = new DSACryptoServiceProvider())
+                {
+                    privateKey = dsa.ToXmlString(true);
+                    publicKey = dsa.ToXmlString(false);
+                }
+
+                var signature = EncryptedMessage.CreateSignature(combinedBytes, privateKey);
+
+                var msData = new MemoryStream(combinedBytes);
+                streams.Add(msData);
+
+                var att = new MimePart()
+                {
+                    Content = new MimeContent(msData),
+                    ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                    ContentTransferEncoding = ContentEncoding.Base64,
+                    FileName = "Signature.enc"
+                };
+
+                body.Add(att);
+
+                MemoryStream msKey = new MemoryStream(Encoding.UTF8.GetBytes(publicKey));
+                streams.Add(msKey);
+
+                att = new MimePart()
+                {
+                    Content = new MimeContent(msKey),
+                    ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                    ContentTransferEncoding = ContentEncoding.Base64,
+                    FileName = "SignatureKey.enc"
+                };
+
+                body.Add(att);
+            }
+
             foreach (var item in fileAttachments)
             {
+                var stream = File.OpenRead(item.FilePathName);
+                streams.Add(stream);
+
                 var attachment = new MimePart()
                 {
-                    Content = new MimeContent(File.OpenRead(item.FilePathName)),
+                    Content = new MimeContent(stream),
                     ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                     ContentTransferEncoding = ContentEncoding.Base64,
                     FileName = item.FileName
@@ -325,7 +376,17 @@ namespace Secure_Email_Client
 
                     MessageBox.Show("Сообщение отправлено!");
 
-                    EncryptedMessage.RemoveTempFiles();
+                    foreach (var item in streams)
+                    {
+                        try
+                        {
+                            item.Close();
+                        }
+                        catch
+                        {
+                            continue;
+                        }
+                    }
 
                     this.Close();
                 }
@@ -333,13 +394,21 @@ namespace Secure_Email_Client
                 {
                     MessageBox.Show("Сообщение не отправлено.\n" + ex.Message);
 
-                    EncryptedMessage.RemoveTempFiles();
+                    foreach (var item in streams)
+                    {
+                        try
+                        {
+                            item.Close();
+                        }
+                        catch
+                        {
+                            continue;
+                        }
+                    }
 
                     return false;
                 }
             }
-
-            EncryptedMessage.RemoveTempFiles();
 
             return false;
         }
@@ -351,6 +420,8 @@ namespace Secure_Email_Client
             // BodyText.ef
             // DESKey.ef
             // DESIV.ef
+
+            List<Stream> streams = new List<Stream>();
 
             // кому отправляем
             string to = rsaUsersList.Text;
@@ -378,9 +449,30 @@ namespace Secure_Email_Client
 
             var attachment = new MimePart();
 
+            var bodyStream = File.OpenRead(bodyTextPath);
+            streams.Add(bodyStream);
+
+            (string key, string iv) encryptedDES = EncryptedMessage.EncryptDES(to, login, des.key, des.iv);
+
+            var desKeyStream = File.OpenRead(encryptedDES.key);
+            streams.Add(desKeyStream);
+
+            var desIVStream = File.OpenRead(encryptedDES.iv);
+            streams.Add(desIVStream);
+
+            List<(string FileName, string FilePath)> listOfStreamAttachments = new List<(string, string)>();
+
+            foreach (var item in fileAttachments)
+            {
+                byte[] data = File.ReadAllBytes(item.FilePathName);
+                string currentAttachmentPath = EncryptedMessage.EncryptMessage(data, to, login, DateTime.Now, des.key, des.iv);
+
+                listOfStreamAttachments.Add((item.FileName, currentAttachmentPath));
+            }
+
             attachment = new MimePart()
             {
-                Content = new MimeContent(File.OpenRead(bodyTextPath)),
+                Content = new MimeContent(bodyStream),
                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                 ContentTransferEncoding = ContentEncoding.Base64,
                 FileName = "BodyText.ef"
@@ -388,11 +480,9 @@ namespace Secure_Email_Client
 
             body.Add(attachment);
 
-            (string key, string iv) encryptedDES = EncryptedMessage.EncryptDES(to, login, des.key, des.iv);
-
             attachment = new MimePart()
             {
-                Content = new MimeContent(File.OpenRead(encryptedDES.key)),
+                Content = new MimeContent(desKeyStream),
                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                 ContentTransferEncoding = ContentEncoding.Base64,
                 FileName = "DESKey.ef"
@@ -402,7 +492,7 @@ namespace Secure_Email_Client
 
             attachment = new MimePart()
             {
-                Content = new MimeContent(File.OpenRead(encryptedDES.iv)),
+                Content = new MimeContent(desIVStream),
                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                 ContentTransferEncoding = ContentEncoding.Base64,
                 FileName = "DESIV.ef"
@@ -410,14 +500,68 @@ namespace Secure_Email_Client
 
             body.Add(attachment);
 
-            foreach (var item in fileAttachments)
+            if (checkESP.Checked)
             {
-                byte[] data = File.ReadAllBytes(item.FilePathName);
-                string currentAttachmentPath = EncryptedMessage.EncryptMessage(data, to, login, DateTime.Now, des.key, des.iv);
+                long length = bodyStream.Length;
+                byte[] textBytes = new byte[length];
+                bodyStream.Read(textBytes, 0, (int)length);
+                byte[] attachmentsBytes = listOfStreamAttachments.SelectMany(item => File.ReadAllBytes(item.FilePath)).ToArray();
+
+                byte[] combinedBytes = textBytes.Concat(attachmentsBytes).ToArray();
+
+                string privateKey;
+                string publicKey;
+
+                using (var dsa = new DSACryptoServiceProvider())
+                {
+                    privateKey = dsa.ToXmlString(true);
+                    publicKey = dsa.ToXmlString(false);
+                }
+
+                var signature = EncryptedMessage.CreateSignature(combinedBytes, privateKey);
+
+                MemoryStream msData = new MemoryStream(combinedBytes);
+                streams.Add(msData);
+
+                var att = new MimePart()
+                {
+                    Content = new MimeContent(msData),
+                    ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                    ContentTransferEncoding = ContentEncoding.Base64,
+                    FileName = "Signature.enc"
+                };
+
+                body.Add(att);
+
+                MemoryStream msKey = new MemoryStream(Encoding.UTF8.GetBytes(publicKey));
+                streams.Add(msKey);
+
+                att = new MimePart()
+                {
+                    Content = new MimeContent(msKey),
+                    ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                    ContentTransferEncoding = ContentEncoding.Base64,
+                    FileName = "SignatureKey.enc"
+                };
+
+                body.Add(att);
+            }
+
+            List<FileAttachment> encFileAtt = new List<FileAttachment>();
+
+            foreach (var item in listOfStreamAttachments)
+            {
+                encFileAtt.Add(new FileAttachment(item.FileName, item.FilePath));
+            }
+
+            foreach (var item in encFileAtt)
+            {
+                var stream = File.OpenRead(item.FilePathName);
+                streams.Add(stream);
 
                 attachment = new MimePart()
                 {
-                    Content = new MimeContent(File.OpenRead(currentAttachmentPath)),
+                    Content = new MimeContent(stream),
                     ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                     ContentTransferEncoding = ContentEncoding.Base64,
                     FileName = item.FileName
@@ -448,7 +592,17 @@ namespace Secure_Email_Client
 
                     MessageBox.Show("Сообщение отправлено!");
 
-                    EncryptedMessage.RemoveTempFiles();
+                    foreach (var item in streams)
+                    {
+                        try
+                        {
+                            item.Close();
+                        }
+                        catch
+                        {
+                            continue;
+                        }
+                    }
 
                     this.Close();
                 }
@@ -456,27 +610,23 @@ namespace Secure_Email_Client
                 {
                     MessageBox.Show("Сообщение не отправлено.\n" + ex.Message);
 
-                    EncryptedMessage.RemoveTempFiles();
+                    foreach (var item in streams)
+                    {
+                        try
+                        {
+                            item.Close();
+                        }
+                        catch
+                        {
+                            continue;
+                        }
+                    }
 
                     return false;
                 }
             }
 
-            EncryptedMessage.RemoveTempFiles();
-
             return false;
-        }
-
-        private string CreateSignature(byte[] data, string pathSignature, string key)
-        {
-            string path = EncryptedMessage.CreateSignature(data, pathSignature, key);
-            return path;
-        }
-
-        private bool CheckSignature(byte[] data, byte[] signature, string key)
-        {
-            bool isVerif = EncryptedMessage.VerifySignature(data, signature, key);
-            return isVerif;
         }
 
         private void sentButton_Click(object sender, EventArgs e)

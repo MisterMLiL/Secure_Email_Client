@@ -568,6 +568,8 @@ namespace Secure_Email_Client
             {
                 sentForm.ShowDialog();
             }
+
+            EncryptedMessage.DeleteDirectory(EncryptedMessage.tempEmails);
         }
 
         #endregion
@@ -727,7 +729,7 @@ namespace Secure_Email_Client
                             MessageBox.Show("Ошибка расшифрования сообщения:\n" + exc.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
 
-                        EncryptedMessage.RemoveTempFiles();
+                        EncryptedMessage.DeleteDirectory(EncryptedMessage.tempEmails);
                     }
 
                     using (var sentForm = new OneMailForm(message, isEnc, desDecrypted, userFrom, currentUser.Login))
