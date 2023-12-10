@@ -229,7 +229,7 @@ namespace Secure_Email_Client
             return null;
         }
 
-        public static string EncryptMessage(byte[] sourceData, string user, string userfrom, DateTime date, byte[] key, byte[] iv)
+        public static string EncryptMessage(byte[] sourceData, string user, string userfrom, int date, byte[] key, byte[] iv)
         {
             using (var rsa = new RSACryptoServiceProvider())
             {
@@ -250,9 +250,12 @@ namespace Secure_Email_Client
                     string sourcefile = Path.Combine(tempEmails, user, user + "_temp");
                     string outputfile = Path.Combine(tempEmails, user, user + "_enc_" + date.ToString().Replace(':', '.'));
 
-                    using (var bw = new BinaryWriter(File.Open(sourcefile, FileMode.Create)))
+                    using (var stream = File.Open(sourcefile, FileMode.Create))
                     {
-                        bw.Write(sourceData);
+                        using (var bw = new BinaryWriter(stream))
+                        {
+                            bw.Write(sourceData);
+                        }
                     }
 
                     EncryptFile(sourcefile, outputfile, des.Key, des.IV);
@@ -329,73 +332,27 @@ namespace Secure_Email_Client
             }
         }
 
-        public static void RemoveTempFiles()
+        public static void DeleteDirectory(string path)
         {
-            if (Directory.Exists(tempEmails))
+            if (!Directory.Exists(path))
             {
-                Directory.Delete(tempEmails);
+                return;
             }
+
+            foreach (var directory in Directory.GetDirectories(path))
+            {
+                DeleteDirectory(directory);
+            }
+
+            foreach (var file in Directory.GetFiles(path))
+            {
+                File.Delete(file);
+            }
+
+            Directory.Delete(path);
         }
 
-        static string publicKeyPath = "publicKey.xml";
-
-        //static void Main()
-        //{
-        //    while (true)
-        //    {
-        //        Console.WriteLine("Выберите операцию:");
-        //        Console.WriteLine("1. Создать цифровую подпись");
-        //        Console.WriteLine("2. Проверить цифровую подпись");
-        //        Console.WriteLine("0. Выход");
-        //        Console.Write("Ваш выбор: ");
-
-        //        int choice;
-        //        if (!int.TryParse(Console.ReadLine(), out choice))
-        //        {
-        //            Console.WriteLine("Неверный ввод. Попробуйте снова.\n");
-        //            continue;
-        //        }
-
-        //        switch (choice)
-        //        {
-        //            case 1:
-        //                Console.Write("Введите путь к файлу для создания подписи: ");
-        //                string sourceFile = Console.ReadLine();
-        //                Console.Write("Введите путь для сохранения файла с подписью: ");
-        //                string signatureFile = Console.ReadLine();
-
-        //                using (var dsa = new DSACryptoServiceProvider())
-        //                {
-        //                    string privateKey = dsa.ToXmlString(true);
-        //                    string publicKey = dsa.ToXmlString(false); // Сохраняем публичный ключ
-        //                    File.WriteAllText(publicKeyPath, publicKey); // Записываем публичный ключ в файл
-        //                    CreateSignature(sourceFile, signatureFile, privateKey);
-        //                    Console.WriteLine("Цифровая подпись успешно создана!\n");
-        //                }
-        //                break;
-
-        //            case 2:
-        //                Console.Write("Введите путь к исходному файлу: ");
-        //                sourceFile = Console.ReadLine();
-        //                Console.Write("Введите путь к файлу с подписью: ");
-        //                signatureFile = Console.ReadLine();
-
-        //                string loadedPublicKey = File.ReadAllText(publicKeyPath);
-        //                bool isVerified = VerifySignature(sourceFile, signatureFile, loadedPublicKey);
-        //                Console.WriteLine($"Подпись верифицирована: {isVerified}\n");
-        //                break;
-
-        //            case 0:
-        //                return; // Завершение программы
-
-        //            default:
-        //                Console.WriteLine("Неверный выбор. Попробуйте снова.\n");
-        //                break;
-        //        }
-        //    }
-        //}
-
-        public static string CreateSignature(byte[] data, string signatureFile, string privateKey)
+        public static byte[] CreateSignature(byte[] data, string privateKey)
         {
             byte[] signature;
 
@@ -405,11 +362,7 @@ namespace Secure_Email_Client
                 signature = dsa.SignData(data, HashAlgorithmName.SHA1);
             }
 
-            string path = Path.Combine(tempEmails, signatureFile);
-
-            File.WriteAllBytes(path, signature);
-
-            return path;
+            return signature;
         }
 
         public static bool VerifySignature(byte[] data, byte[] signature, string publicKey)
