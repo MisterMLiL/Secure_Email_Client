@@ -229,7 +229,7 @@ namespace Secure_Email_Client
             return null;
         }
 
-        public static string EncryptMessage(byte[] sourceData, string user, string userfrom, DateTime date, byte[] key, byte[] iv)
+        public static string EncryptMessage(byte[] sourceData, string user, string userfrom, int date, byte[] key, byte[] iv)
         {
             using (var rsa = new RSACryptoServiceProvider())
             {
@@ -250,9 +250,12 @@ namespace Secure_Email_Client
                     string sourcefile = Path.Combine(tempEmails, user, user + "_temp");
                     string outputfile = Path.Combine(tempEmails, user, user + "_enc_" + date.ToString().Replace(':', '.'));
 
-                    using (var bw = new BinaryWriter(File.Open(sourcefile, FileMode.Create)))
+                    using (var stream = File.Open(sourcefile, FileMode.Create))
                     {
-                        bw.Write(sourceData);
+                        using (var bw = new BinaryWriter(stream))
+                        {
+                            bw.Write(sourceData);
+                        }
                     }
 
                     EncryptFile(sourcefile, outputfile, des.Key, des.IV);
@@ -331,6 +334,11 @@ namespace Secure_Email_Client
 
         public static void DeleteDirectory(string path)
         {
+            if (!Directory.Exists(path))
+            {
+                return;
+            }
+
             foreach (var directory in Directory.GetDirectories(path))
             {
                 DeleteDirectory(directory);

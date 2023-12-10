@@ -101,6 +101,9 @@ namespace Secure_Email_Client
                 var attachment = attachments[j] as MimePart;
                 if (attachment != null)
                 {
+                    if (attachment.FileName == "Signature.enc" || attachment.FileName == "SignatureKey.enc")
+                        continue;
+
                     attachmentsList.Items.Add(attachment.ContentId + attachment.FileName);
                 }
             }
@@ -311,7 +314,7 @@ namespace Secure_Email_Client
 
                 var signature = EncryptedMessage.CreateSignature(combinedBytes, privateKey);
 
-                var msData = new MemoryStream(combinedBytes);
+                var msData = new MemoryStream(signature);
                 streams.Add(msData);
 
                 var att = new MimePart()
@@ -416,11 +419,6 @@ namespace Secure_Email_Client
         // Отправить готовое шифрованное письмо
         private bool CreateEncryptedMessage()
         {
-            // Список используемых файлов
-            // BodyText.ef
-            // DESKey.ef
-            // DESIV.ef
-
             List<Stream> streams = new List<Stream>();
 
             // кому отправляем
@@ -442,7 +440,7 @@ namespace Secure_Email_Client
 
             var text = Encoding.UTF8.GetBytes(bodyText);
 
-            string bodyTextPath = EncryptedMessage.EncryptMessage(text, to, login, DateTime.Now, des.key, des.iv);
+            string bodyTextPath = EncryptedMessage.EncryptMessage(text, to, login, DateTime.Now.Millisecond, des.key, des.iv);
 
             // создаем составное тело сообщения
             var body = new Multipart("mixed");
@@ -465,7 +463,7 @@ namespace Secure_Email_Client
             foreach (var item in fileAttachments)
             {
                 byte[] data = File.ReadAllBytes(item.FilePathName);
-                string currentAttachmentPath = EncryptedMessage.EncryptMessage(data, to, login, DateTime.Now, des.key, des.iv);
+                string currentAttachmentPath = EncryptedMessage.EncryptMessage(data, to, login, DateTime.Now.Millisecond, des.key, des.iv);
 
                 listOfStreamAttachments.Add((item.FileName, currentAttachmentPath));
             }
@@ -505,9 +503,24 @@ namespace Secure_Email_Client
                 long length = bodyStream.Length;
                 byte[] textBytes = new byte[length];
                 bodyStream.Read(textBytes, 0, (int)length);
+
+                byte[] combinedBytes = textBytes;
+
+                length = desKeyStream.Length;
+                textBytes = new byte[length];
+                desKeyStream.Read(textBytes, 0, (int)length);
+
+                combinedBytes = combinedBytes.Concat(textBytes).ToArray();
+
+                length = desIVStream.Length;
+                textBytes = new byte[length];
+                desIVStream.Read(textBytes, 0, (int)length);
+
+                combinedBytes = combinedBytes.Concat(textBytes).ToArray();
+
                 byte[] attachmentsBytes = listOfStreamAttachments.SelectMany(item => File.ReadAllBytes(item.FilePath)).ToArray();
 
-                byte[] combinedBytes = textBytes.Concat(attachmentsBytes).ToArray();
+                combinedBytes = combinedBytes.Concat(attachmentsBytes).ToArray();
 
                 string privateKey;
                 string publicKey;
@@ -520,7 +533,7 @@ namespace Secure_Email_Client
 
                 var signature = EncryptedMessage.CreateSignature(combinedBytes, privateKey);
 
-                MemoryStream msData = new MemoryStream(combinedBytes);
+                MemoryStream msData = new MemoryStream(signature);
                 streams.Add(msData);
 
                 var att = new MimePart()

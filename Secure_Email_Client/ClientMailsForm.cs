@@ -17,6 +17,7 @@ using System.Diagnostics.Metrics;
 using System.Reflection;
 using System.Collections.Generic;
 using Org.BouncyCastle.Crypto.Encodings;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Secure_Email_Client
 {
@@ -680,10 +681,82 @@ namespace Secure_Email_Client
             {
                 if (mailData.SelectedRows.Count > 0)
                 {
+                    var createPath = Path.Combine("temp_emails", currentUser.Login);
+
+                    if (!Directory.Exists(createPath))
+                    {
+                        Directory.CreateDirectory(createPath);
+                    }
+
                     var selectedRow = mailData.SelectedRows[0];
                     var header = selectedRow.HeaderCell.Value.ToString();
 
                     var message = ReceiveEmailWithAttachments(foldersList.SelectedItem.ToString(), int.Parse(header));
+
+                    var attachments = message.Attachments.ToList();
+
+                    var espFile = attachments.Find(obj => (obj as MimePart).FileName == "Signature.enc") as MimePart;
+                    var espKey = attachments.Find(obj => (obj as MimePart).FileName == "SignatureKey.enc") as MimePart;
+
+                    if (espFile != null && espKey != null)
+                    {
+                        string signatureFilePath = Path.Combine("temp_emails", currentUser.Login, "signature_file_temp");
+                        string signatureKeyPath = Path.Combine("temp_emails", currentUser.Login, "signature_key_temp");
+
+                        byte[] signFile;
+                        using (var stream = File.Create(signatureFilePath))
+                        {
+                            espFile.Content.DecodeTo(stream);
+                        }
+
+                        signFile = File.ReadAllBytes(signatureFilePath);
+
+                        byte[] signKey;
+                        using (var stream = File.Create(signatureKeyPath))
+                        {
+                            espKey.Content.DecodeTo(stream);
+                        }
+
+                        signKey = File.ReadAllBytes(signatureKeyPath);
+
+                        string publicKey = Encoding.UTF8.GetString(signKey);
+
+                        attachments.Remove(espFile);
+                        attachments.Remove(espKey);
+
+                        List<string> filePaths = new List<string>();
+
+                        byte[] array = new byte[0];
+
+                        if (message.HtmlBody != null)
+                        {
+                            array = Encoding.UTF8.GetBytes(message.HtmlBody);
+                        }
+
+                        foreach (var item in attachments)
+                        {
+                            var att = item as MimePart;
+
+                            using (var ms = new MemoryStream())
+                            {
+                                att.Content.DecodeTo(ms);
+
+                                array = array.Concat(ms.ToArray()).ToArray();
+                            }
+                        }
+
+                        var isRight = EncryptedMessage.VerifySignature(array, signFile, publicKey);
+
+                        if (!isRight)
+                        {
+                            if (MessageBox.Show("Сигнатура письма не верифицирована, дальнейшее открытие сообщения может быть опасно\n" +
+                                "Открыть письмо?", "Ошибка", MessageBoxButtons.YesNo, MessageBoxIcon.Error) == DialogResult.No)
+                            {
+                                EncryptedMessage.DeleteDirectory(EncryptedMessage.tempEmails);
+                                return;
+                            }
+                        }
+                    }
 
                     if (message.Subject.StartsWith("%%%") && message.Subject.EndsWith("%%%"))
                     {
@@ -702,8 +775,6 @@ namespace Secure_Email_Client
                             {
                                 throw new Exception("Данный пользователь не отправлял Вам свой ключ");
                             }
-
-                            var attachments = message.Attachments.ToList();
 
                             var messageBodyAttachment = attachments[0] as MimePart;
                             var desKeyAttachment = attachments[1] as MimePart;
@@ -806,6 +877,8 @@ namespace Secure_Email_Client
                     {
                         sentForm.ShowDialog();
                     }
+
+                    EncryptedMessage.DeleteDirectory(EncryptedMessage.tempEmails);
                 }
             }
         }
