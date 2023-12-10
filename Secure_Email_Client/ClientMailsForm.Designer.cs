@@ -202,15 +202,15 @@
             // refreshButton
             // 
             refreshButton.BackColor = Color.FromArgb(255, 255, 192);
-            refreshButton.Dock = DockStyle.Right;
+            refreshButton.Dock = DockStyle.Fill;
             refreshButton.FlatAppearance.BorderColor = Color.FromArgb(224, 224, 224);
             refreshButton.FlatStyle = FlatStyle.Flat;
             refreshButton.Font = new Font("Segoe UI", 12F, FontStyle.Regular, GraphicsUnit.Point);
-            refreshButton.Location = new Point(118, 0);
+            refreshButton.Location = new Point(115, 0);
             refreshButton.Name = "refreshButton";
-            refreshButton.Size = new Size(30, 30);
+            refreshButton.Size = new Size(33, 30);
             refreshButton.TabIndex = 1;
-            refreshButton.Text = "↺";
+            refreshButton.Text = "↺ Обновить";
             refreshButton.UseVisualStyleBackColor = false;
             refreshButton.Click += refreshButton_Click;
             // 
@@ -333,6 +333,7 @@
             Name = "ClientMailsForm";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Почтовый клиент";
+            Load += ClientMailsForm_Load;
             mainPanel.ResumeLayout(false);
             mailPanel.ResumeLayout(false);
             dataMailPanel.ResumeLayout(false);

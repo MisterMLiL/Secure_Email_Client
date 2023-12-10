@@ -18,22 +18,6 @@ using System.Reflection;
 using System.Collections.Generic;
 using Org.BouncyCastle.Crypto.Encodings;
 
-//login = "eugene.laz1@yandex.ru";
-//password = "uhmsmrlfzvcskrol";
-
-//login = "eugene.lazurenko@yandex.ru";
-//password = "wxfggbdwrxigtnko";
-
-//imapServer = "imap.yandex.ru";
-//imapPort = 993;
-//useSsl = true;
-
-//smtpServer = "smtp.yandex.ru";
-//smtpPort = 465;
-
-//login = "eugenelazurenko@gmail.com";
-//password = "vmydllnkjszmcfst";
-
 namespace Secure_Email_Client
 {
     public partial class ClientMailsForm : Form
@@ -43,12 +27,15 @@ namespace Secure_Email_Client
 
         Dictionary<string, IMailFolder> folderNames;
         Dictionary<IMailFolder, string> folderIMail;
+        Dictionary<string, string> withoutLoggedInFolders;
 
         User currentUser;
 
         List<RSAUsers> rsaList;
 
         bool isLoggedIn = true;
+
+        UserAuthorization form;
 
         public ClientMailsForm(User user, UserAuthorization form)
         {
@@ -64,9 +51,22 @@ namespace Secure_Email_Client
             {
                 client = new ImapClient();
 
+                this.form = form;
+
                 client.Connect(currentUser.ImapServer, currentUser.ImapPort, currentUser.Ssl);
                 client.Authenticate(currentUser.Login, currentUser.Password);
+            }
+            catch (Exception exc)
+            {
+                MessageBox.Show("Ошибка авторизации:\n" + exc.Source + ": " + exc.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                isLoggedIn = false;
+            }
+        }
 
+        private void ClientMailsForm_Load(object sender, EventArgs e)
+        {
+            if (isLoggedIn)
+            {
                 folderNames = new Dictionary<string, IMailFolder> {
                     { "INBOX", client.Inbox },
                     { "Sent", client.GetFolder(SpecialFolder.Sent) },
@@ -80,26 +80,36 @@ namespace Secure_Email_Client
                     { client.GetFolder(SpecialFolder.Drafts), "Drafts" },
                     { client.GetFolder(SpecialFolder.Trash), "Trash" }
                 };
+            }
+            else
+            {
+                withoutLoggedInFolders = new Dictionary<string, string>
+                {
+                    { "Входящие", "INBOX" },
+                    { "Отправленные", "Sent" },
+                    { "Черновики", "Drafts" },
+                    { "Корзина", "Trash" }
+                };
+            }
 
-                SetToolTips();
+            SetToolTips();
 
-                foldersList.SelectedIndex = 0;
+            foldersList.SelectedIndex = 0;
 
-                foldersList.SelectedIndexChanged += listFolders_SelectedIndexChanged;
+            foldersList.SelectedIndexChanged += listFolders_SelectedIndexChanged;
 
-                rsaList = new List<RSAUsers>();
+            rsaList = new List<RSAUsers>();
 
-                EncryptedMessage.GetAllUserFromJsonFile(ref rsaList, currentUser.Login);
+            EncryptedMessage.GetAllUserFromJsonFile(ref rsaList, currentUser.Login);
 
+            newMessageButton.Visible = isLoggedIn;
+
+            contactButton.Visible = isLoggedIn;
+
+            if (isLoggedIn)
                 DownloadAllEmails();
 
-                form.Visible = false;
-            }
-            catch (Exception exc)
-            {
-                MessageBox.Show("Ошибка авторизации:\n" + exc.Source + ": " + exc.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                isLoggedIn = false;
-            }
+            form.Visible = false;
         }
 
         private void SetToolTips()
@@ -118,7 +128,7 @@ namespace Secure_Email_Client
             EncryptedMessage.WriteAllUserFromJsonFile(rsaList, currentUser.Login);
         }
 
-        public void GetAllEmails(IMailFolder folder)
+        public void GetAllEmails(string folder)
         {
             ReceiveEmailAsync(folder);
         }
@@ -136,7 +146,7 @@ namespace Secure_Email_Client
             {
                 var folder = folderDict.Value;
 
-                folder.Open(FolderAccess.ReadOnly);
+                folder.Open(FolderAccess.ReadWrite);
 
                 var folderName = folderDict.Key;
 
@@ -352,6 +362,33 @@ namespace Secure_Email_Client
 
                     if (File.Exists(messagePath))
                         continue;
+                    else if (File.Exists(messagePath + ".deleted"))
+                    {
+                        var trash = client.GetFolder(SpecialFolder.Trash);
+                        trash.Open(FolderAccess.ReadWrite);
+
+                        if (!folder.IsOpen)
+                            folder.Open(FolderAccess.ReadWrite);
+
+                        var mess = folder.GetMessage(uid);
+
+                        if (folder == client.GetFolder(SpecialFolder.Trash))
+                        {
+                            folder.AddFlags(uid, MessageFlags.Deleted, true);
+                            folder.Expunge();
+                        }
+                        else
+                        {
+                            folder.MoveTo(uid, trash);
+                        }
+
+                        if (trash.IsOpen)
+                            trash.Close();
+
+                        File.Delete(messagePath + ".deleted");
+
+                        continue;
+                    }
 
                     using (var stream = File.Create(messagePath))
                     {
@@ -379,10 +416,10 @@ namespace Secure_Email_Client
             }
         }
 
-        public MimeMessage[] ReadAllEmailsAndAttachments(IMailFolder folder)
+        public MimeMessage[] ReadAllEmailsAndAttachments(string folder)
         {
             List<MimeMessage> messages = new List<MimeMessage>();
-            string folderName = folderIMail[folder];
+            string folderName = withoutLoggedInFolders[folder];
 
             var folderPath = Path.Combine(emailsFolderPath, currentUser.Login, folderName);
             if (Directory.Exists(folderPath))
@@ -417,7 +454,7 @@ namespace Secure_Email_Client
 
         #region Методы работы почты
 
-        public void ReceiveEmailAsync(IMailFolder folder)
+        public void ReceiveEmailAsync(string folder)
         {
             if (client == null)
                 return;
@@ -434,7 +471,9 @@ namespace Secure_Email_Client
 
                     string from = string.Join("; ", message.From.Select(x => x.ToString()));
 
-                    mailData.Rows.Add(from, message.Subject, message.TextBody);
+                    string date = message.Date.DateTime.ToString();
+
+                    mailData.Rows.Add(from, message.Subject, date);
                     mailData.Rows[i].HeaderCell.Value = i.ToString();
                 }
 
@@ -442,7 +481,7 @@ namespace Secure_Email_Client
             }
             else
             {
-                var inbox = folder;
+                var inbox = getFolder(folder);
                 inbox.Open(FolderAccess.ReadOnly);
 
                 for (int i = 0; i < inbox.Count; i++)
@@ -463,7 +502,7 @@ namespace Secure_Email_Client
                         subject.Replace("%%%", "");
                     }
 
-                    string date = message.Date.ToString();
+                    string date = message.Date.DateTime.ToString();
 
                     mailData.Rows.Add(from, subject, date);
                     mailData.Rows[i].HeaderCell.Value = i.ToString();
@@ -475,7 +514,7 @@ namespace Secure_Email_Client
             }
         }
 
-        private MimeMessage ReceiveEmailWithAttachments(IMailFolder folder, int index)
+        private MimeMessage ReceiveEmailWithAttachments(string folder, int index)
         {
             MimeMessage message;
             if (!isLoggedIn)
@@ -486,8 +525,8 @@ namespace Secure_Email_Client
             }
             else
             {
-                var inbox = folder;
-                inbox.Open(MailKit.FolderAccess.ReadOnly);
+                var inbox = getFolder(folder);
+                inbox.Open(FolderAccess.ReadOnly);
 
                 message = inbox.GetMessage(index);
 
@@ -514,34 +553,64 @@ namespace Secure_Email_Client
             }
         }
 
-        private void moveMessageToTrash(IMailFolder folder, int index)
+        private void moveMessageToTrash(string folder, int index, string date)
         {
-            var trash = client.GetFolder(SpecialFolder.Trash);
-            trash.Open(FolderAccess.ReadWrite);
-
-            var inbox = folder;
-            inbox.Open(FolderAccess.ReadWrite);
-
-            var message = inbox.GetMessage(index);
-
-            if (folder == client.GetFolder(SpecialFolder.Trash))
+            if (isLoggedIn)
             {
-                inbox.AddFlags(index, MessageFlags.Deleted, true);
-                inbox.Expunge();
+                var trash = client.GetFolder(SpecialFolder.Trash);
+                trash.Open(FolderAccess.ReadWrite);
+
+                var inbox = getFolder(folder);
+                inbox.Open(FolderAccess.ReadWrite);
+
+                var message = inbox.GetMessage(index);
+
+                if (folder == "Корзина")
+                {
+                    inbox.AddFlags(index, MessageFlags.Deleted, true);
+                    inbox.Expunge();
+                }
+                else
+                {
+                    inbox.MoveTo(index, trash);
+                }
+
+                if (inbox.IsOpen)
+                {
+                    inbox.Close();
+                }
+
+                if (trash.IsOpen)
+                {
+                    trash.Close();
+                }
             }
             else
             {
-                inbox.MoveTo(index, trash);
-            }
+                var folderPath = Path.Combine(emailsFolderPath, currentUser.Login, withoutLoggedInFolders[folder], date.Replace(':', '.') + ".eml");
 
-            if (inbox.IsOpen)
-            {
-                inbox.Close();
-            }
+                if (folder == "Корзина")
+                {
+                    string newFileName = Path.Combine(emailsFolderPath, currentUser.Login, withoutLoggedInFolders[folder], date.Replace(':', '.') + ".eml.deleted");
 
-            if (trash.IsOpen)
-            {
-                trash.Close();
+                    if (File.Exists(folderPath))
+                    {
+                        File.Move(folderPath, newFileName);
+                        File.Delete(folderPath);
+                    }
+                }
+                else
+                {
+                    string newFolderPath = Path.Combine(emailsFolderPath, currentUser.Login, "Trash", date.Replace(':', '.') + ".eml");
+                    string newFileName = Path.Combine(emailsFolderPath, currentUser.Login, withoutLoggedInFolders[folder], date.Replace(':', '.') + ".eml.deleted");
+
+                    if (File.Exists(folderPath))
+                    {
+                        File.Copy(folderPath, newFolderPath);
+                        File.Move(folderPath, newFileName);
+                        File.Delete(folderPath);
+                    }
+                }
             }
         }
 
@@ -553,10 +622,11 @@ namespace Secure_Email_Client
         {
             if (foldersList.SelectedIndex != -1)
             {
-                GetAllEmails(getFolder(foldersList.SelectedItem.ToString()));
+                GetAllEmails(foldersList.SelectedItem.ToString());
             }
 
-            DownloadAllEmails();
+            if (isLoggedIn)
+                DownloadAllEmails();
         }
 
         private void newMessageButton_Click(object sender, EventArgs e)
@@ -583,7 +653,7 @@ namespace Secure_Email_Client
 
             if (foldersList.SelectedIndex != -1)
             {
-                GetAllEmails(getFolder(foldersList.SelectedItem.ToString()));
+                GetAllEmails(foldersList.SelectedItem.ToString());
             }
         }
 
@@ -613,7 +683,7 @@ namespace Secure_Email_Client
                     var selectedRow = mailData.SelectedRows[0];
                     var header = selectedRow.HeaderCell.Value.ToString();
 
-                    var message = ReceiveEmailWithAttachments(getFolder(foldersList.SelectedItem.ToString()), int.Parse(header));
+                    var message = ReceiveEmailWithAttachments(foldersList.SelectedItem.ToString(), int.Parse(header));
 
                     if (message.Subject.StartsWith("%%%") && message.Subject.EndsWith("%%%"))
                     {
@@ -762,10 +832,11 @@ namespace Secure_Email_Client
                 // Получаем индексы строки и столбца
                 var selectedRow = mailData.SelectedRows[0];
                 var header = int.Parse(selectedRow.HeaderCell.Value.ToString());
+                var date = selectedRow.Cells[2].Value.ToString();
 
-                IMailFolder folder = getFolder(foldersList.SelectedItem.ToString());
+                var folder = foldersList.SelectedItem.ToString();
 
-                moveMessageToTrash(folder, header);
+                moveMessageToTrash(folder, header, date);
 
                 GetAllEmails(folder);
 
